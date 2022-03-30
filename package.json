@@ -1,0 +1,23 @@
+{
+  "name": "scrapple",
+  "version": "1.0.0",
+  "description": "### ♨️  This is a boilerplate template that can be used to deploy a LiveView Phoenix app to Heroku within seconds.",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oliverswitzer/scrapple.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/oliverswitzer/scrapple/issues"
+  },
+  "homepage": "https://github.com/oliverswitzer/scrapple#readme"
+}
