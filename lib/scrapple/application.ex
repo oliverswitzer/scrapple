@@ -15,7 +15,8 @@ defmodule Scrapple.Application do
       # Start the PubSub system
       {Phoenix.PubSub, name: Scrapple.PubSub},
       # Start the Endpoint (http/https)
-      ScrappleWeb.Endpoint
+      ScrappleWeb.Endpoint,
+      {Test.FixturesCatalog, name: Test.FixturesCatalog}
       # Start a worker by calling: Scrapple.Worker.start_link(arg)
       # {Scrapple.Worker, arg}
     ]

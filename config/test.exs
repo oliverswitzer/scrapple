@@ -18,7 +18,7 @@ config :scrapple, Scrapple.Repo,
 config :scrapple, ScrappleWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
   secret_key_base: "TxUL0FvoN5A4EZSMZVE8LnrUD1ymvRQ3z8eMb4azLMcpo0sVocZWP26ejV3YhgbE",
-  server: false
+  server: true
 
 # In test we don't send emails.
 config :scrapple, Scrapple.Mailer, adapter: Swoosh.Adapters.Test
