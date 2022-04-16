@@ -6,24 +6,27 @@ defmodule Scrapple do
 
     page
     |> Playwright.Page.text_content("body")
-    |> IO.puts()
   end
 
   def scrape(instructions) do
     browser = Playwright.launch(:chromium)
     page = browser |> Playwright.Browser.new_page()
 
-    instructions
-    |> Enum.reduce(%{}, fn [command, value] = instructions, data ->
-      IO.inspect(command)
+    data =
+      instructions
+      |> Enum.reduce(%{}, fn [command, value] = instructions, data ->
+        case command do
+          "visit" ->
+            navigate_to(page, value)
+            data
 
-      case command do
-        "visit" -> navigate_to(page, value)
-        _ -> reduce_to_data(page, instructions)
-      end
-    end)
+          _ ->
+            data
+            |> Map.merge(reduce_to_data(page, instructions))
+        end
+      end)
 
-    {:ok, %{}}
+    {:ok, data}
 
     # page
     # |> Playwright.Page.goto(
@@ -50,9 +53,13 @@ defmodule Scrapple do
     # |> Playwright.Browser.close()
   end
 
-  defp reduce_to_data(page, ["find_all", value]) do
-    if value.do && value.then do
-    end
+  defp reduce_to_data(page, ["find_all", %{map: "get_text", name: name, selector: selector}]) do
+    reduced =
+      page
+      |> Playwright.Page.query_selector_all(selector)
+      |> Enum.map(fn el -> Playwright.ElementHandle.text_content(el) |> String.trim() end)
+
+    %{name => reduced}
   end
 
   # defp save_listing(page, listing_url) do

@@ -28,6 +28,24 @@ defmodule Test.ScrappleTest do
       """)
 
     upload_fixture(conn, test_name, page_fixture)
+
+    instructions = [
+      ["visit", "http://localhost:4002/#{test_name}"],
+      [
+        "find_all",
+        %{
+          name: "first_page_list_items",
+          selector: ".first_page_list_item",
+          map: "get_text"
+        }
+      ]
+    ]
+
+    assert {:ok, result} = Scrapple.scrape(instructions)
+
+    assert %{
+             "first_page_list_items" => ["First item", "Second item"]
+           } = result
   end
 
   test "getting data off of multiple pages", %{test: test_name, conn: conn} do
