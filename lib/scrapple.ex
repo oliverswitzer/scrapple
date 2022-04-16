@@ -1,18 +1,29 @@
 defmodule Scrapple do
   require Logger
 
+  defp navigate_to(page, url) do
+    Playwright.Page.goto(page, url)
+
+    page
+    |> Playwright.Page.text_content("body")
+    |> IO.puts()
+  end
+
   def scrape(instructions) do
+    browser = Playwright.launch(:chromium)
+    page = browser |> Playwright.Browser.new_page()
+
     instructions
-    |> Enum.reduce(%{}, fn {command, value} = instruction ->
+    |> Enum.reduce(%{}, fn [command, value] = instructions, data ->
+      IO.inspect(command)
+
       case command do
-        "visit" -> navigate_to(value)
-        _ -> reduce_to_data(instructions)
+        "visit" -> navigate_to(page, value)
+        _ -> reduce_to_data(page, instructions)
       end
     end)
 
     {:ok, %{}}
-    # browser = Playwright.launch(:chromium)
-    # page = browser |> Playwright.Browser.new_page()
 
     # page
     # |> Playwright.Page.goto(
@@ -39,7 +50,7 @@ defmodule Scrapple do
     # |> Playwright.Browser.close()
   end
 
-  defp reduce_to_data(["find_all", value]) do
+  defp reduce_to_data(page, ["find_all", value]) do
     if value.do && value.then do
     end
   end

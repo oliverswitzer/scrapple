@@ -1,7 +1,36 @@
 defmodule Test.ScrappleTest do
   use ScrappleWeb.ConnCase
 
-  test "simple case", %{test: test_name, conn: conn} do
+  test "just visiting a website works", %{test: test_name, conn: conn} do
+    page_fixture =
+      html_tree("""
+      <div>Some page</div>
+      """)
+
+    upload_fixture(conn, test_name, page_fixture)
+
+    instructions = [
+      ["visit", "http://localhost:4002/#{test_name}"]
+    ]
+
+    assert {:ok, _} = Scrapple.scrape(instructions)
+  end
+
+  test "getting data off of one page", %{test: test_name, conn: conn} do
+    page_fixture =
+      html_tree("""
+        <div class="first_page_list_item">
+          First item
+        </div>
+        <div class="first_page_list_item">
+          Second item
+        </div>
+      """)
+
+    upload_fixture(conn, test_name, page_fixture)
+  end
+
+  test "getting data off of multiple pages", %{test: test_name, conn: conn} do
     first_page_fixture =
       html_tree("""
         <div class="first_page_list_item">
@@ -18,11 +47,11 @@ defmodule Test.ScrappleTest do
         <h1 id="second_page_other_thing">other thing :id</h1>
       """)
 
-    upload_fixture(conn, "first_page", first_page_fixture)
-    upload_fixture(conn, "second_page", second_page_fixture)
+    upload_fixture(conn, "#{test_name}-first_page", first_page_fixture)
+    upload_fixture(conn, "#{test_name}-second_page", second_page_fixture)
 
     instructions = [
-      ["visit", "https://localhost:4000/first_page"],
+      ["visit", "http://localhost:4002/first_page"],
       [
         "find_all",
         %{
