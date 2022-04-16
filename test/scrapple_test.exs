@@ -48,6 +48,41 @@ defmodule Test.ScrappleTest do
            } = result
   end
 
+  test "getting multiple nested pieces of data off of one page", %{test: test_name, conn: conn} do
+    page_fixture =
+      html_tree("""
+        <div class="top_level_thing">
+          <div class="nested_thing">Nested thing 1</div>
+        </div>
+        <div class="top_level_thing">
+          <div class="nested_thing">Nested thing 2</div>
+        </div>
+      """)
+
+    upload_fixture(conn, test_name, page_fixture)
+
+    instructions = [
+      ["visit", "http://localhost:4002/#{test_name}"],
+      [
+        "find_all",
+        %{
+          # Omitting name means that this first level of nesting is ignored in the returned data response
+          selector: ".top_level_thing",
+          map: [
+            "find_first",
+            %{selector: ".nested_thing", name: "nested_things", map: "get_text"}
+          ]
+        }
+      ]
+    ]
+
+    assert {:ok, result} = Scrapple.scrape(instructions)
+
+    assert %{
+             "nested_things" => ["Nested thing 1", "Nested thing 2"]
+           } = result
+  end
+
   test "getting data off of multiple pages", %{test: test_name, conn: conn} do
     first_page_fixture =
       html_tree("""

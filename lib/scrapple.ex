@@ -1,7 +1,7 @@
 defmodule Scrapple do
   require Logger
 
-  defp navigate_to(page, url) do
+  defp navigate_to(%{page: page}, url) do
     Playwright.Page.goto(page, url)
 
     page
@@ -15,14 +15,18 @@ defmodule Scrapple do
     data =
       instructions
       |> Enum.reduce(%{}, fn [command, value] = instructions, data ->
+        ctx = %{
+          page: page
+        }
+
         case command do
           "visit" ->
-            navigate_to(page, value)
+            navigate_to(ctx, value)
             data
 
           _ ->
             data
-            |> Map.merge(reduce_to_data(page, instructions))
+            |> Map.merge(reduce_to_data(ctx, instructions))
         end
       end)
 
@@ -53,11 +57,43 @@ defmodule Scrapple do
     # |> Playwright.Browser.close()
   end
 
-  defp reduce_to_data(page, ["find_all", %{map: "get_text", name: name, selector: selector}]) do
+  defp reduce_to_data(%{page: page}, [
+         "find_all",
+         %{map: "get_text", name: name, selector: selector}
+       ]) do
     reduced =
       page
       |> Playwright.Page.query_selector_all(selector)
       |> Enum.map(fn el -> Playwright.ElementHandle.text_content(el) |> String.trim() end)
+
+    %{name => reduced}
+  end
+
+  defp reduce_to_data(%{page: page} = ctx, [
+         "find_all",
+         %{map: map_instructions, selector: selector}
+       ]) do
+    page
+    |> Playwright.Page.query_selector_all(selector)
+    |> Enum.reduce(%{}, fn el, acc ->
+      reduced =
+        ctx
+        |> Map.put(:current_el, el)
+        |> reduce_to_data(map_instructions)
+
+      acc
+      |> deep_merge(reduced)
+    end)
+  end
+
+  defp reduce_to_data(%{current_el: el}, [
+         "find_first",
+         %{map: "get_text", name: name, selector: selector}
+       ]) do
+    reduced =
+      Playwright.ElementHandle.query_selector(el, selector)
+      |> Playwright.ElementHandle.text_content()
+      |> String.trim()
 
     %{name => reduced}
   end
@@ -103,6 +139,19 @@ defmodule Scrapple do
   #     end
   #   end
   # end
+
+  def deep_merge(map1, map2) do
+    resolver = fn
+      _, one, two
+      when not is_map(one) and not is_map(two) and not is_list(one) and not is_list(two) ->
+        [one, two]
+
+      _, _original, _override ->
+        DeepMerge.continue_deep_merge()
+    end
+
+    DeepMerge.deep_merge(map1, map2, resolver)
+  end
 
   defp info(msg) do
     Logger.info("#{inspect(__MODULE__)}: #{msg}")
