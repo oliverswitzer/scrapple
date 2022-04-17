@@ -12,90 +12,128 @@ defmodule Scrapple do
     browser = Playwright.launch(:chromium)
     page = browser |> Playwright.Browser.new_page()
 
-    data =
-      instructions
-      |> Enum.reduce(%{}, fn [command, value] = instructions, data ->
-        ctx = %{
-          page: page
-        }
+    ctx = %{
+      page: page
+    }
 
-        case command do
-          "visit" ->
-            navigate_to(ctx, value)
-            data
+    data = reduce_instructions(ctx, instructions)
 
-          _ ->
-            data
-            |> Map.merge(reduce_to_data(ctx, instructions))
-        end
-      end)
+    browser
+    |> Playwright.Browser.close()
 
     {:ok, data}
+  end
 
-    # page
-    # |> Playwright.Page.goto(
-    #   "https://www.searchcraigslist.net/results?#{URI.encode_query(%{q: search_query})}"
-    #   |> info()
-    # )
+  defp reduce_instructions(ctx, instructions) do
+    instructions
+    |> Enum.reduce(%{_ctx: ctx, _tmp: []}, fn instructions, data ->
+      case instructions do
+        ["visit", url] ->
+          navigate_to(ctx, url)
+          data
 
-    # listings =
-    #   page
-    #   |> Playwright.Page.query_selector_all(".gs-webResult")
+        ["map", sub_instructions] when is_list(instructions) ->
+          # Figuring out a way to pass the last scraped data (extracted from the previous step, can be in ephmeral field data OR in data depending on if the user specified a name field in the last step or not)
 
-    # listings
-    # |> Enum.map(fn listing_el ->
-    #   listing_el
-    #   |> Playwright.ElementHandle.query_selector("a.gs-title")
-    #   |> Playwright.ElementHandle.get_attribute("href")
-    # end)
-    # |> Enum.map(fn listing_url ->
-    #   :timer.sleep(trunc(:rand.uniform() * 1000))
-    #   save_listing(page, listing_url)
-    # end)
+          last_reduced_data = hd(_tmp) # ["/url1", "/url2"]
+          reduce_instructions(ctx, sub_instructions)
 
-    # browser
-    # |> Playwright.Browser.close()
+        [_action, mapper] ->
+          case reduce_to_data(ctx, instructions) do
+            {:ephemeral_field, field_data} ->
+              Map.put(data, :_tmp, [field_data] ++ data._tmp)
+
+            field_data ->
+              data
+              |> Map.put(:_tmp, [field_data] ++ data._tmp)
+              |> Map.merge(field_data)
+          end
+      end
+    end)
+    |> Map.drop([:_ctx, :_tmp])
   end
 
   defp reduce_to_data(%{page: page}, [
          "find_all",
-         %{map: "get_text", name: name, selector: selector}
-       ]) do
+         %{map: mapper, selector: selector} = instructions
+       ])
+       when is_binary(mapper) or is_list(mapper) do
+    map_fn =
+      case mapper do
+        "get_text" ->
+          fn el -> Playwright.ElementHandle.text_content(el) |> String.trim() end
+
+        ["get_attribute", attr_name] ->
+          fn el -> Playwright.ElementHandle.get_attribute(el, attr_name) end
+
+        _ ->
+          raise "Incorrect 'map' function while parsing selector #{selector}. Received: #{
+                  inspect(mapper)
+                }"
+      end
+
     reduced =
       page
       |> Playwright.Page.query_selector_all(selector)
-      |> Enum.map(fn el -> Playwright.ElementHandle.text_content(el) |> String.trim() end)
+      |> Enum.map(map_fn)
+      |> IO.inspect(label: "AFTER MAPPING #{inspect(mapper)}")
 
-    %{name => reduced}
+    IO.inspect(Playwright.Page.text_content(page, "body"))
+
+    if Map.get(instructions, :name) do
+      %{instructions.name => reduced}
+    else
+      {:ephemeral_field, reduced}
+    end
   end
 
   defp reduce_to_data(%{page: page} = ctx, [
          "find_all",
-         %{map: map_instructions, selector: selector}
-       ]) do
+         %{map: mapper, selector: selector}
+       ])
+       when is_map(mapper) do
     page
     |> Playwright.Page.query_selector_all(selector)
     |> Enum.reduce(%{}, fn el, acc ->
       reduced =
         ctx
         |> Map.put(:current_el, el)
-        |> reduce_to_data(map_instructions)
+        |> reduce_to_data(mapper)
 
       acc
       |> deep_merge(reduced)
     end)
   end
 
-  defp reduce_to_data(%{current_el: el}, [
+  defp reduce_to_data(ctx, ["find_first", mappers])
+       when is_list(mappers) do
+    mappers
+    |> Enum.reduce(%{}, fn mapper, data ->
+      Map.merge(data, reduce_to_data(ctx, ["find_first", mapper]))
+    end)
+  end
+
+  defp reduce_to_data(ctx, [
          "find_first",
          %{map: "get_text", name: name, selector: selector}
        ]) do
-    reduced =
-      Playwright.ElementHandle.query_selector(el, selector)
+    target =
+      if el = Map.get(ctx, :current_el) do
+        Playwright.ElementHandle.query_selector(el, selector)
+      else
+        page = Map.get(ctx, :page)
+
+        page
+        |> Playwright.Page.query_selector(selector)
+      end
+
+    data =
+      target
+      |> IO.inspect(label: Playwright.Page.text_content(ctx.page, "body"))
       |> Playwright.ElementHandle.text_content()
       |> String.trim()
 
-    %{name => reduced}
+    %{name => data}
   end
 
   # defp save_listing(page, listing_url) do
@@ -139,6 +177,30 @@ defmodule Scrapple do
   #     end
   #   end
   # end
+
+  # page
+  # |> Playwright.Page.goto(
+  #   "https://www.searchcraigslist.net/results?#{URI.encode_query(%{q: search_query})}"
+  #   |> info()
+  # )
+
+  # listings =
+  #   page
+  #   |> Playwright.Page.query_selector_all(".gs-webResult")
+
+  # listings
+  # |> Enum.map(fn listing_el ->
+  #   listing_el
+  #   |> Playwright.ElementHandle.query_selector("a.gs-title")
+  #   |> Playwright.ElementHandle.get_attribute("href")
+  # end)
+  # |> Enum.map(fn listing_url ->
+  #   :timer.sleep(trunc(:rand.uniform() * 1000))
+  #   save_listing(page, listing_url)
+  # end)
+
+  # browser
+  # |> Playwright.Browser.close()
 
   def deep_merge(map1, map2) do
     resolver = fn

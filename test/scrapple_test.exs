@@ -104,14 +104,19 @@ defmodule Test.ScrappleTest do
     upload_fixture(conn, "#{test_name}-second_page", second_page_fixture)
 
     instructions = [
-      ["visit", "http://localhost:4002/first_page"],
+      ["visit", "http://localhost:4002/#{test_name}-first_page"],
       [
         "find_all",
         %{
-          name: "first_page_list_items",
           selector: ".first_page_list_item a",
-          do: "follow_link",
-          then: [
+          map: ["get_attribute", "href"]
+        }
+      ],
+      [
+        "map",
+        [
+          ["visit", "prev[n]"],
+          [
             "find_first",
             [
               %{
@@ -126,9 +131,36 @@ defmodule Test.ScrappleTest do
               }
             ]
           ]
-        }
+        ]
       ]
     ]
+
+    # instructions = [
+    #   ["visit", "http://localhost:4002/first_page"],
+    #   [
+    #     "find_all",
+    #     %{
+    #       name: "first_page_list_items",
+    #       selector: ".first_page_list_item a",
+    #       do: "follow_link",
+    #       then: [
+    #         "find_first",
+    #         [
+    #           %{
+    #             name: "second_page_header",
+    #             selector: "#second_page_header",
+    #             map: "get_text"
+    #           },
+    #           %{
+    #             name: "second_page_other_thing",
+    #             selector: "#second_page_other_thing",
+    #             map: "get_text"
+    #           }
+    #         ]
+    #       ]
+    #     }
+    #   ]
+    # ]
 
     {:ok, result} = Scrapple.scrape(instructions)
 
