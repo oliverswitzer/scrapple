@@ -48,7 +48,8 @@ defmodule Test.ScrappleTest do
            } = result
   end
 
-  test "getting multiple nested pieces of data off of one page", %{test: test_name, conn: conn} do
+  test "getting multiple nested pieces of data off of one page find_all and then find_first in each one)",
+       %{test: test_name, conn: conn} do
     page_fixture =
       html_tree("""
         <div class="top_level_thing">
@@ -83,14 +84,53 @@ defmodule Test.ScrappleTest do
            } = result
   end
 
+  test "find_first to target parent el and then a find_all within that el", %{
+    test: test_name,
+    conn: conn
+  } do
+    page_fixture =
+      html_tree("""
+        <div class="top_level_thing">
+          <div class="nested_thing">Nested thing 1</div>
+          <div class="nested_thing">Nested thing 2</div>
+        </div>
+        <div class="some_other_top_level_thing_that_doesnt_matter">
+          <div class="nested_thing">Nested thing 3</div>
+          <div class="nested_thing">Nested thing 4</div>
+        </div>
+      """)
+
+    upload_fixture(conn, test_name, page_fixture)
+
+    instructions = [
+      ["visit", "http://localhost:4002/#{test_name}"],
+      [
+        "find_first",
+        %{
+          selector: ".top_level_thing",
+          map: [
+            "find_all",
+            %{selector: ".nested_thing", name: "nested_things", map: "get_text"}
+          ]
+        }
+      ]
+    ]
+
+    assert {:ok, result} = Scrapple.scrape(instructions)
+
+    assert %{
+             "nested_things" => ["Nested thing 1", "Nested thing 2"]
+           } = result
+  end
+
   test "getting data off of multiple pages", %{test: test_name, conn: conn} do
     first_page_fixture =
       html_tree("""
         <div class="first_page_list_item">
-          <a href="/second_page/1"></a> 
+          <a href="/#{test_name}-second_page/1">First link</a>
         </div>
         <div class="first_page_list_item">
-          <a href="/second_page/2"></a> 
+          <a href="/#{test_name}-second_page/2">Second link</a>
         </div>
       """)
 
@@ -104,13 +144,13 @@ defmodule Test.ScrappleTest do
     upload_fixture(conn, "#{test_name}-second_page", second_page_fixture)
 
     instructions = [
-      ["visit", "http://localhost:4002/first_page"],
+      ["visit", URI.encode("http://localhost:4002/#{test_name}-first_page")],
       [
         "find_all",
         %{
           name: "first_page_list_items",
           selector: ".first_page_list_item a",
-          do: "follow_link",
+          do: "click",
           then: [
             "find_first",
             [
@@ -133,14 +173,14 @@ defmodule Test.ScrappleTest do
     {:ok, result} = Scrapple.scrape(instructions)
 
     assert %{
-             first_page_list_items: [
+             "first_page_list_items" => [
                %{
-                 second_page_header: "header 1",
-                 second_page_other_thing: "other thing 1"
+                 "second_page_header" => "header 1",
+                 "second_page_other_thing" => "other thing 1"
                },
                %{
-                 second_page_header: "header 2",
-                 second_page_other_thing: "other thing 2"
+                 "second_page_header" => "header 2",
+                 "second_page_other_thing" => "other thing 2"
                }
              ]
            } = result
