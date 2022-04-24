@@ -36,26 +36,59 @@ defmodule Scrapple do
   # Find all + Take an action on each one
   defp reduce_to_data(
          %{page: page} = ctx,
-         ["find_all", %{do: action, then: next_instructions, name: name, selector: selector}]
+         [
+           query_command,
+           %{do: action, then: next_instructions, selector: selector} = instructions
+         ]
        ) do
-    case action do
-      "click" ->
+    case {query_command, action} do
+      {"find_all", "click"} ->
         locator = Playwright.Locator.new(page, selector)
 
-        reductions =
+        reduced =
           0..(Playwright.Locator.count(locator) - 1)
           |> Enum.reduce([], fn i, acc ->
-            Playwright.Locator.nth(locator, i)
+            clickable_locator = Playwright.Locator.nth(locator, i)
+
+            clickable_locator
             |> Playwright.Locator.click()
 
             data = reduce_to_data(ctx, next_instructions)
 
+            #  TODO: We don't want to do this unless we have navigated away from this page!
             Playwright.Page.evaluate(page, "history.back()")
+            Playwright.Locator.wait_for(clickable_locator)
 
             [data] ++ acc
           end)
 
-        %{name => Enum.reverse(reductions)}
+        if name = Map.get(instructions, :name) do
+          %{name => Enum.reverse(reduced)}
+        else
+          reduced
+          |> Enum.reduce(%{}, fn r, acc ->
+            deep_merge(acc, r)
+          end)
+        end
+
+      {"find_first", "click"} ->
+        clickable_locator =
+          Playwright.Locator.new(page, selector)
+          |> Playwright.Locator.first()
+
+        clickable_locator |> Playwright.Locator.click()
+
+        data = reduce_to_data(ctx, next_instructions)
+
+        #  TODO: We don't want to do this unless we have navigated away from this page!
+        Playwright.Page.evaluate(page, "history.back()")
+        Playwright.Locator.wait_for(clickable_locator)
+
+        if name = Map.get(instructions, :name) do
+          %{name => data}
+        else
+          data
+        end
 
       _ ->
         nil
@@ -122,7 +155,7 @@ defmodule Scrapple do
         ["get_attribute", attr_name] ->
           get_attribute(ctx, selector, attr_name)
 
-        _ ->
+        _mapper ->
           # Further reduce for each element
           el = Playwright.Page.query_selector(ctx.page, selector)
 
@@ -136,40 +169,6 @@ defmodule Scrapple do
     else
       data
     end
-  end
-
-  defp reduce_to_data(ctx, [
-         "find_first",
-         %{map: "get_text", name: name, selector: selector}
-       ]) do
-    data =
-      if el = Map.get(ctx, :current_el) do
-        target = Playwright.ElementHandle.query_selector(el, selector)
-
-        if target do
-          target
-          |> Playwright.ElementHandle.text_content()
-          |> String.trim()
-        else
-          raise "Couldn't find element within parent el #{inspect(el)} with selector: #{selector}"
-        end
-      else
-        page = Map.get(ctx, :page)
-
-        target =
-          page
-          |> Playwright.Page.query_selector(selector, %{timeout: 1_000})
-
-        if target do
-          target
-          |> Playwright.ElementHandle.text_content()
-          |> String.trim()
-        else
-          raise "Couldn't find element with selector #{selector} on page: #{Playwright.Page.text_content(page, "document")}"
-        end
-      end
-
-    %{name => data}
   end
 
   # Clearly duplicated and needs to be DRYed up (see `get_text/2` below)

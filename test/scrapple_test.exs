@@ -90,11 +90,11 @@ defmodule Test.ScrappleTest do
   } do
     page_fixture =
       html_tree("""
-        <div class="top_level_thing">
+        <div class="some_top_level_thing_that_doesnt_matter">
           <div class="nested_thing">Nested thing 1</div>
           <div class="nested_thing">Nested thing 2</div>
         </div>
-        <div class="some_other_top_level_thing_that_doesnt_matter">
+        <div class="top_level_thing">
           <div class="nested_thing">Nested thing 3</div>
           <div class="nested_thing">Nested thing 4</div>
         </div>
@@ -119,7 +119,69 @@ defmodule Test.ScrappleTest do
     assert {:ok, result} = Scrapple.scrape(instructions)
 
     assert %{
-             "nested_things" => ["Nested thing 1", "Nested thing 2"]
+             "nested_things" => ["Nested thing 3", "Nested thing 4"]
+           } = result
+  end
+
+  @tag :skip
+  test "nested targeting with find_first and then find_all", %{
+    test: test_name,
+    conn: conn
+  } do
+    IO.puts(
+      "This test is currently failing because Playwright.ElementHandle.query_selector_all() just returns all elements on the page and not just elements within the element passed in as first argument."
+    )
+
+    page_fixture =
+      html_tree("""
+        <! –– the .nested_thing elements and h1 below should never be returned since
+        we are only targeting .nested_thing's and h1's inside of .top_level_thing ––>
+
+        <h1>im not nested at all</h1>
+        <div class="top_level_thing_2">
+          <div class="nested_thing">Nested thing 1</div>
+          <div class="nested_thing">Nested thing 2</div>
+        </div>
+
+        <div class="top_level_thing">
+          <h1>im the first nested thing</h1>
+          <div class="top_level_thing_2">
+            <div class="nested_thing">Nested thing 3</div>
+            <div class="nested_thing">Nested thing 4</div>
+          </div>
+        </div>
+      """)
+
+    upload_fixture(conn, test_name, page_fixture)
+
+    instructions = [
+      ["visit", "http://localhost:4002/#{test_name}"],
+      [
+        "find_first",
+        %{
+          selector: ".top_level_thing",
+          map: [
+            "find_first",
+            [
+              %{selector: "h1", name: "header", map: "get_text"},
+              %{
+                selector: ".top_level_thing_2",
+                map: [
+                  "find_all",
+                  %{name: "super_nested_thing", selector: ".nested_thing", map: "get_text"}
+                ]
+              }
+            ]
+          ]
+        }
+      ]
+    ]
+
+    assert {:ok, result} = Scrapple.scrape(instructions)
+
+    assert %{
+             "header" => "im the first nested thing",
+             "super_nested_thing" => ["Nested thing 3", "Nested thing 4"]
            } = result
   end
 
@@ -136,12 +198,18 @@ defmodule Test.ScrappleTest do
 
     second_page_fixture =
       html_tree("""
-        <h1 id="second_page_header">header :id</h1>
-        <h1 id="second_page_other_thing">other thing :id</h1>
+        <h1 id="second_page_header">second page :id</h1>
+        <a id="third_page_link" href="/#{test_name}-third_page/:id">link to third page :id</a>
+      """)
+
+    third_page_fixture =
+      html_tree("""
+        <h1 id="third_page_header">third page :id</h1>
       """)
 
     upload_fixture(conn, "#{test_name}-first_page", first_page_fixture)
     upload_fixture(conn, "#{test_name}-second_page", second_page_fixture)
+    upload_fixture(conn, "#{test_name}-third_page", third_page_fixture)
 
     instructions = [
       ["visit", URI.encode("http://localhost:4002/#{test_name}-first_page")],
@@ -160,9 +228,16 @@ defmodule Test.ScrappleTest do
                 map: "get_text"
               },
               %{
-                name: "second_page_other_thing",
-                selector: "#second_page_other_thing",
-                map: "get_text"
+                selector: "a#third_page_link",
+                do: "click",
+                then: [
+                  "find_first",
+                  %{
+                    name: "third_page_header",
+                    selector: "#third_page_header",
+                    map: "get_text"
+                  }
+                ]
               }
             ]
           ]
@@ -175,12 +250,12 @@ defmodule Test.ScrappleTest do
     assert %{
              "first_page_list_items" => [
                %{
-                 "second_page_header" => "header 1",
-                 "second_page_other_thing" => "other thing 1"
+                 "second_page_header" => "second page 1",
+                 "third_page_header" => "third page 1"
                },
                %{
-                 "second_page_header" => "header 2",
-                 "second_page_other_thing" => "other thing 2"
+                 "second_page_header" => "second page 2",
+                 "third_page_header" => "third page 2"
                }
              ]
            } = result
