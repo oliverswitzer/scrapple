@@ -1,5 +1,6 @@
 import Config
 
+config :playwright, LaunchOptions, headless: false
 # Configure your database
 config :scrapple, Scrapple.Repo,
   username: "postgres",

@@ -12,14 +12,19 @@ defmodule Scrapple do
     data =
       instructions
       |> Enum.reduce(ctx, fn [command, value] = instructions, data ->
-        case command do
-          "visit" ->
-            navigate_to(ctx, value)
-            data
+        try do
+          case command do
+            "visit" ->
+              navigate_to(ctx, value)
+              data
 
-          _ ->
-            data
-            |> Map.merge(reduce_to_data(ctx, instructions))
+            _ ->
+              data
+              |> Map.merge(reduce_to_data(ctx, instructions))
+          end
+        rescue
+          _e in Protocol.UndefinedError ->
+            info("Couldnt find something")
         end
       end)
 
@@ -244,8 +249,8 @@ defmodule Scrapple do
     DeepMerge.deep_merge(map1, map2, resolver)
   end
 
-  # defp info(msg) do
-  #   Logger.info("#{inspect(__MODULE__)}: #{msg}")
-  #   msg
-  # end
+  defp info(msg) do
+    Logger.info("#{inspect(__MODULE__)}: #{msg}")
+    msg
+  end
 end
